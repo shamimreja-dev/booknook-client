@@ -14,13 +14,13 @@ export default function Navbar() {
 
   const links = (
     <>
-      <Link href="/" className={pathname === "/" ? "text-primary font-bold" : ""}>Home</Link>
-      <Link href="/books" className={pathname === "/books" ? "text-primary font-bold" : ""}>All Books</Link>
+      <li><Link href="/" className={pathname === "/" ? "text-primary font-bold" : ""}>Home</Link></li>
+      <li><Link href="/books" className={pathname === "/books" ? "text-primary font-bold" : ""}>All Books</Link></li>
       {user && (
         <>
-          <Link href="/add-book" className={pathname === "/add-book" ? "text-primary font-bold" : ""}>Add Book</Link>
-          <Link href="/my-books" className={pathname === "/my-books" ? "text-primary font-bold" : ""}>My Books</Link>
-          <Link href="/my-borrows" className={pathname === "/my-borrows" ? "text-primary font-bold" : ""}>My Borrows</Link>
+          <li><Link href="/add-book" className={pathname === "/add-book" ? "text-primary font-bold" : ""}>Add Book</Link></li>
+          <li><Link href="/my-books" className={pathname === "/my-books" ? "text-primary font-bold" : ""}>My Books</Link></li>
+          <li><Link href="/my-borrows" className={pathname === "/my-borrows" ? "text-primary font-bold" : ""}>My Borrows</Link></li>
         </>
       )}
     </>
@@ -42,7 +42,7 @@ export default function Navbar() {
         <Link href="/" className="text-2xl font-black text-primary">BookNook</Link>
       </div>
       <div className="navbar-center hidden lg:flex">
-        <ul className="menu menu-horizontal px-1 gap-6 font-medium">
+        <ul className="menu menu-horizontal px-1 gap-2 font-medium">
           {links}
         </ul>
       </div>

@@ -28,21 +28,21 @@ export default function Home() {
           navigation
           className="h-full"
         >
-          <SwiperSlide className="bg-cover bg-center flex items-center justify-center text-white bg-[url('https://i.ibb.co.com/8K5y6J1/banner1.jpg')] bg-neutral/80 bg-blend-overlay p-12">
+          <SwiperSlide className="bg-cover bg-center flex items-center justify-center text-white bg-[url('https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=1200')] bg-neutral/80 bg-blend-overlay p-12">
             <div className="text-center space-y-4 max-w-xl">
               <h1 className="text-4xl md:text-5xl font-bold">Discover Your Next Favorite Book</h1>
               <p className="text-sm md:text-base">Explore thousands of books across multiple categories and borrow them instantly.</p>
               <Link href="/books" className="btn btn-primary text-white">Browse Books</Link>
             </div>
           </SwiperSlide>
-          <SwiperSlide className="bg-cover bg-center flex items-center justify-center text-white bg-[url('https://i.ibb.co.com/9V7z4X2/banner2.jpg')] bg-neutral/80 bg-blend-overlay p-12">
+          <SwiperSlide className="bg-cover bg-center flex items-center justify-center text-white bg-[url('https://images.unsplash.com/photo-1457369804613-52c61a468e7d?q=80&w=1200')] bg-neutral/80 bg-blend-overlay p-12">
             <div className="text-center space-y-4 max-w-xl">
               <h1 className="text-4xl md:text-5xl font-bold">Small Library, Endless Knowledge</h1>
               <p className="text-sm md:text-base">Add new books to our community library and manage your borrows effortlessly.</p>
               <Link href="/books" className="btn btn-primary text-white">Browse Books</Link>
             </div>
           </SwiperSlide>
-          <SwiperSlide className="bg-cover bg-center flex items-center justify-center text-white bg-[url('https://i.ibb.co.com/2s3K6L5/banner3.jpg')] bg-neutral/80 bg-blend-overlay p-12">
+          <SwiperSlide className="bg-cover bg-center flex items-center justify-center text-white bg-[url('https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?q=80&w=1200')] bg-neutral/80 bg-blend-overlay p-12">
             <div className="text-center space-y-4 max-w-xl">
               <h1 className="text-4xl md:text-5xl font-bold">Read, Borrow, and Return</h1>
               <p className="text-sm md:text-base">Simple and seamless online library management designed for book lovers.</p>
