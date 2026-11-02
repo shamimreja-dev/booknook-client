@@ -17,13 +17,12 @@ export default function RegisterPage() {
     const userInfo = { name, email, password };
 
     try {
-      // Send user data to MongoDB backend
       const res = await axios.post('http://localhost:5000/users', userInfo);
       if (res.data.insertedId || res.data.message === 'user already exists') {
         alert('Registration successful!');
         router.push('/login');
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Something went wrong during registration.');
     }
   };

@@ -1,101 +1,128 @@
-"use client";
-import { useState } from "react";
-import toast from "react-hot-toast";
+'use client';
+import { useState, useEffect, FormEvent } from 'react';
+import axios from 'axios';
+import { useRouter } from 'next/navigation';
 
-export default function AddBook() {
-  const [loading, setLoading] = useState(false);
-  const user = { name: "John Doe", email: "john@gmail.com" };
+export default function AddBookPage() {
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const handleAddBook = async (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    // পেজ টাইপ সেট করা
+    document.title = 'BookNook | Add Book';
+
+    const email = localStorage.getItem('user-email');
+    if (!email) {
+      alert('Please login first to add a book!');
+      router.push('/login');
+      return;
+    }
+    setUserEmail(email);
+    setUserName(email.split('@')[0]);
+  }, [router]);
+
+  const handleAddBook = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
-    const form = e.currentTarget;
-    const title = (form.elements.namedItem("title") as HTMLInputElement).value;
-    const author = (form.elements.namedItem("author") as HTMLInputElement).value;
-    const category = (form.elements.namedItem("category") as HTMLSelectElement).value;
-    const image = (form.elements.namedItem("image") as HTMLInputElement).value;
-    const totalCopies = (form.elements.namedItem("totalCopies") as HTMLInputElement).value;
-    const description = (form.elements.namedItem("description") as HTMLTextAreaElement).value;
 
-    const bookData = {
+    const form = e.currentTarget;
+    const title = (form.elements.namedItem('title') as HTMLInputElement).value;
+    const author = (form.elements.namedItem('author') as HTMLInputElement).value;
+    const category = (form.elements.namedItem('category') as HTMLSelectElement).value;
+    const image = (form.elements.namedItem('image') as HTMLInputElement).value;
+    const description = (form.elements.namedItem('description') as HTMLTextAreaElement).value;
+    const totalCopies = parseInt((form.elements.namedItem('totalCopies') as HTMLInputElement).value);
+
+    const newBook = {
       title,
       author,
       category,
       image,
-      totalCopies: parseInt(totalCopies),
       description,
-      userName: user.name,
-      userEmail: user.email,
+      totalCopies,
+      userName,
+      userEmail,
+      createdAt: new Date()
     };
 
     try {
-      const res = await fetch("http://localhost:5000/books", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bookData),
-      });
-
-      if (res.ok) {
-        toast.success("Book added successfully!");
-        form.reset();
-      } else {
-        toast.error("Failed to add book.");
+      const res = await axios.post('http://localhost:5000/books', newBook);
+      if (res.status === 200 || res.status === 201) {
+        alert('Book added successfully!');
+        router.push('/books');
       }
     } catch (err) {
-      toast.error("An error occurred.");
+      console.error('Failed to add book:', err);
+      alert('Failed to add book. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto my-12 p-8 bg-base-100 shadow-xl rounded-2xl border">
-      <h2 className="text-3xl font-bold mb-6 text-center">Add a New Book</h2>
-      <form onSubmit={handleAddBook} className="space-y-4">
-        <div>
-          <label className="label font-medium">Book Title</label>
-          <input type="text" name="title" required className="input input-bordered w-full" placeholder="Enter book title" />
-        </div>
-        <div>
-          <label className="label font-medium">Author Name</label>
-          <input type="text" name="author" required className="input input-bordered w-full" placeholder="Author name" />
-        </div>
-        <div>
-          <label className="label font-medium">Category</label>
-          <select name="category" className="select select-bordered w-full">
-            <option value="Fiction">Fiction</option>
-            <option value="Science">Science</option>
-            <option value="History">History</option>
-            <option value="Kids">Kids</option>
-            <option value="Others">Others</option>
-          </select>
-        </div>
-        <div>
-          <label className="label font-medium">Book Image URL</label>
-          <input type="url" name="image" required className="input input-bordered w-full" placeholder="Image URL" />
-        </div>
-        <div>
-          <label className="label font-medium">Total Copies</label>
-          <input type="number" name="totalCopies" required min="1" defaultValue="1" className="input input-bordered w-full" />
-        </div>
-        <div>
-          <label className="label font-medium">Short Description</label>
-          <textarea name="description" required className="textarea textarea-bordered w-full h-24" placeholder="Book description..."></textarea>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
+    <div className="max-w-2xl mx-auto px-4 py-10">
+      <div className="bg-white p-8 rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">Add a New Book</h1>
+        <form onSubmit={handleAddBook} className="space-y-4">
           <div>
-            <label className="label font-medium">User Name (Read-only)</label>
-            <input type="text" value={user.name} readOnly className="input input-disabled w-full" />
+            <label className="block text-sm font-medium text-gray-700">Book Title</label>
+            <input type="text" name="title" required className="w-full px-3 py-2 border rounded-md" placeholder="Enter book title" />
           </div>
+
           <div>
-            <label className="label font-medium">User Email (Read-only)</label>
-            <input type="email" value={user.email} readOnly className="input input-disabled w-full" />
+            <label className="block text-sm font-medium text-gray-700">Author Name</label>
+            <input type="text" name="author" required className="w-full px-3 py-2 border rounded-md" placeholder="Enter author name" />
           </div>
-        </div>
-        <button type="submit" disabled={loading} className="btn btn-primary w-full mt-4">
-          {loading ? "Adding..." : "Add Book"}
-        </button>
-      </form>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Category</label>
+            <select name="category" required className="w-full px-3 py-2 border rounded-md bg-white">
+              <option value="">Select Category</option>
+              <option value="Fiction">Fiction</option>
+              <option value="Science">Science</option>
+              <option value="History">History</option>
+              <option value="Kids">Kids</option>
+              <option value="Others">Others</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Book Image URL (Imgbb/Postimage)</label>
+            <input type="url" name="image" required className="w-full px-3 py-2 border rounded-md" placeholder="Paste image direct URL" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Total Copies</label>
+            <input type="number" name="totalCopies" min="1" required className="w-full px-3 py-2 border rounded-md" placeholder="Number of available copies" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Short Description</label>
+            <textarea name="description" rows={4} required className="w-full px-3 py-2 border rounded-md" placeholder="Write a short description..."></textarea>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">User Name</label>
+              <input type="text" value={userName} readOnly className="w-full px-3 py-2 border rounded-md bg-gray-100 cursor-not-allowed" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">User Email</label>
+              <input type="email" value={userEmail} readOnly className="w-full px-3 py-2 border rounded-md bg-gray-100 cursor-not-allowed" />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition"
+          >
+            {loading ? 'Adding Book...' : 'Add Book'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
