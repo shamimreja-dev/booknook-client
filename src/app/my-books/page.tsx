@@ -1,7 +1,11 @@
-'use client';
-import { useEffect, useState, FormEvent } from 'react';
-import axios from 'axios';
-import { useRouter } from 'next/navigation';
+
+"use client";
+
+import { useEffect, useState, FormEvent } from "react";
+import axios from "axios";
+import { useRouter } from "next/navigation";
+import toast, { Toaster } from "react-hot-toast";
+import { authClient } from "@/lib/auth-client";
 
 interface Book {
   _id: string;
@@ -12,131 +16,355 @@ interface Book {
   description: string;
   totalCopies: number;
   userEmail: string;
+  userName?: string;
 }
 
-export default function MyBooksPage() {
-  const [books, setBooks] = useState<Book[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const router = useRouter();
+const API_URL = "http://localhost:5000";
 
-  // Edit Modal States
-  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+export default function MyBooksPage() {
+  const router = useRouter();
+  const { data: session, isPending } = authClient.useSession();
+
+  const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
 
-  // Delete Modal States
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [bookToDeleteId, setBookToDeleteId] = useState<string | null>(null);
 
-  const userEmail = typeof window !== 'undefined' ? localStorage.getItem('user-email') : '';
+  const [updating, setUpdating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
+  // Get JWT token
+  const getAuthHeaders = async () => {
+    const tokenResult = await authClient.token();
+    const token = tokenResult.data?.token;
+
+    if (!token) {
+      throw new Error("AUTH_TOKEN_MISSING");
+    }
+
+    return {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+  };
+
+  // Fetch logged-in user's books
   useEffect(() => {
-    document.title = 'BookNook | My Books';
-    if (!userEmail) {
-      alert('Please login first!');
-      router.push('/login');
+    document.title = "BookNook | My Books";
+
+    if (isPending) return;
+
+    if (!session?.user) {
+      setLoading(false);
+      router.replace("/login");
       return;
     }
 
-    axios.get('http://localhost:5000/books')
-      .then(res => {
-        // শুধু লগইন করা ইউজারের যোগ করা বইগুলো ফিল্টার করা
-        const myBooks = res.data.filter((book: Book) => book.userEmail === userEmail);
-        setBooks(myBooks);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to fetch books:', err);
-        setLoading(false);
-      });
-  }, [userEmail, router]);
+    let isMounted = true;
 
-  // বই আপডেট হ্যান্ডলার
-  const handleUpdateSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    const fetchMyBooks = async () => {
+      try {
+        setLoading(true);
+
+        const headers = await getAuthHeaders();
+
+        const res = await axios.get(`${API_URL}/books`, {
+          headers,
+          withCredentials: true,
+        });
+
+        if (!isMounted) return;
+
+        const myBooks: Book[] = res.data.filter(
+          (book: Book) =>
+            book.userEmail?.toLowerCase() ===
+            session.user.email?.toLowerCase()
+        );
+
+        setBooks(myBooks);
+      } catch (error) {
+        console.error("Failed to fetch books:", error);
+
+        if (error instanceof Error && error.message === "AUTH_TOKEN_MISSING") {
+          toast.error("Session expired. Please login again.");
+          router.replace("/login");
+          return;
+        }
+
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          toast.error("Please login again.");
+          router.replace("/login");
+          return;
+        }
+
+        toast.error("Failed to fetch your books.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchMyBooks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session, isPending, router]);
+
+  // Update book
+  const handleUpdateSubmit = async (
+    e: FormEvent<HTMLFormElement>
+  ) => {
     e.preventDefault();
+
     if (!selectedBook) return;
 
     const form = e.currentTarget;
-    const title = (form.elements.namedItem('title') as HTMLInputElement).value;
-    const author = (form.elements.namedItem('author') as HTMLInputElement).value;
-    const category = (form.elements.namedItem('category') as HTMLSelectElement).value;
-    const image = (form.elements.namedItem('image') as HTMLInputElement).value;
-    const description = (form.elements.namedItem('description') as HTMLTextAreaElement).value;
-    const totalCopies = parseInt((form.elements.namedItem('totalCopies') as HTMLInputElement).value);
 
-    const updatedData = { title, author, category, image, description, totalCopies };
+    const title = (
+      form.elements.namedItem("title") as HTMLInputElement
+    ).value.trim();
+
+    const author = (
+      form.elements.namedItem("author") as HTMLInputElement
+    ).value.trim();
+
+    const category = (
+      form.elements.namedItem("category") as HTMLSelectElement
+    ).value;
+
+    const image = (
+      form.elements.namedItem("image") as HTMLInputElement
+    ).value.trim();
+
+    const description = (
+      form.elements.namedItem("description") as HTMLTextAreaElement
+    ).value.trim();
+
+    const totalCopies = Number(
+      (form.elements.namedItem("totalCopies") as HTMLInputElement).value
+    );
+
+    if (!title || !author || !category || !image || !description) {
+      toast.error("Please fill in all fields.");
+      return;
+    }
+
+    if (!Number.isInteger(totalCopies) || totalCopies < 1) {
+      toast.error("Total copies must be at least 1.");
+      return;
+    }
+
+    const updatedData = {
+      title,
+      author,
+      category,
+      image,
+      description,
+      totalCopies,
+    };
 
     try {
-      const res = await axios.patch(`http://localhost:5000/books/${selectedBook._id}`, updatedData);
+      setUpdating(true);
+
+      const headers = await getAuthHeaders();
+
+      const res = await axios.patch(
+        `${API_URL}/books/${selectedBook._id}`,
+        updatedData,
+        {
+          headers,
+          withCredentials: true,
+        }
+      );
+
       if (res.status === 200) {
-        alert('Book updated successfully!');
-        setBooks(books.map(b => b._id === selectedBook._id ? { ...b, ...updatedData } : b));
+        toast.success("Book updated successfully!");
+
+        setBooks((previousBooks) =>
+          previousBooks.map((book) =>
+            book._id === selectedBook._id
+              ? { ...book, ...updatedData }
+              : book
+          )
+        );
+
         setIsEditModalOpen(false);
         setSelectedBook(null);
       }
-    } catch (err) {
-      console.error('Failed to update book:', err);
-      alert('Failed to update book.');
+    } catch (error) {
+      console.error("Failed to update book:", error);
+
+      if (error instanceof Error && error.message === "AUTH_TOKEN_MISSING") {
+        toast.error("Please login again.");
+        router.push("/login");
+      } else if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 403
+      ) {
+        toast.error("You can only edit your own books.");
+      } else if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 401
+      ) {
+        toast.error("Session expired. Please login again.");
+        router.push("/login");
+      } else {
+        toast.error("Failed to update book.");
+      }
+    } finally {
+      setUpdating(false);
     }
   };
 
-  // কাস্টম কনফার্মেশনের পর ডিলিট হ্যান্ডলার
+  // Delete book
   const handleDeleteConfirm = async () => {
     if (!bookToDeleteId) return;
 
     try {
-      const res = await axios.delete(`http://localhost:5000/books/${bookToDeleteId}`);
+      setDeleting(true);
+
+      const headers = await getAuthHeaders();
+
+      const res = await axios.delete(
+        `${API_URL}/books/${bookToDeleteId}`,
+        {
+          headers,
+          withCredentials: true,
+        }
+      );
+
       if (res.status === 200) {
-        alert('Book deleted successfully!');
-        setBooks(books.filter(b => b._id !== bookToDeleteId));
+        toast.success("Book deleted successfully!");
+
+        setBooks((previousBooks) =>
+          previousBooks.filter((book) => book._id !== bookToDeleteId)
+        );
+
         setIsDeleteModalOpen(false);
         setBookToDeleteId(null);
       }
-    } catch (err) {
-      console.error('Failed to delete book:', err);
-      alert('Failed to delete book.');
+    } catch (error) {
+      console.error("Failed to delete book:", error);
+
+      if (error instanceof Error && error.message === "AUTH_TOKEN_MISSING") {
+        toast.error("Please login again.");
+        router.push("/login");
+      } else if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 403
+      ) {
+        toast.error("You can only delete your own books.");
+      } else if (
+        axios.isAxiosError(error) &&
+        error.response?.status === 401
+      ) {
+        toast.error("Session expired. Please login again.");
+        router.push("/login");
+      } else {
+        toast.error("Failed to delete book.");
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
-  if (loading) return <div className="text-center py-20">Loading your books...</div>;
+  if (isPending || loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <span className="loading loading-spinner loading-lg text-primary"></span>
+        <p className="ml-3 text-gray-600">Loading your books...</p>
+      </div>
+    );
+  }
+
+  if (!session?.user) {
+    return (
+      <div className="py-20 text-center">
+        Please login to view your books.
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold mb-6">My Added Books</h1>
+    <div className="mx-auto max-w-7xl px-4 py-10">
+      <Toaster position="top-center" reverseOrder={false} />
+
+      <h1 className="mb-2 text-3xl font-bold">My Added Books</h1>
+
+      <p className="mb-6 text-gray-600">
+        Books added by your account: {books.length}
+      </p>
+
       {books.length === 0 ? (
-        <p className="text-gray-600">You haven&apos;t added any books yet.</p>
+        <div className="rounded-lg border border-dashed py-12 text-center">
+          <p className="mb-4 text-gray-600">
+            You haven't added any books yet.
+          </p>
+
+          <button
+            onClick={() => router.push("/add-book")}
+            className="rounded-md bg-blue-600 px-5 py-2 text-white hover:bg-blue-700"
+          >
+            Add Your First Book
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {books.map((book) => (
-            <div key={book._id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col justify-between border border-gray-200">
+            <div
+              key={book._id}
+              className="flex flex-col justify-between overflow-hidden rounded-lg border border-gray-200 bg-white shadow-md"
+            >
               <div>
-                <img src={book.image} alt={book.title} className="w-full h-56 object-cover" />
+                <img
+                  src={book.image}
+                  alt={book.title}
+                  className="h-56 w-full object-cover"
+                />
+
                 <div className="p-5">
-                  <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-md mb-2">
+                  <span className="mb-2 inline-block rounded-md bg-blue-100 px-2.5 py-1 text-xs text-blue-800">
                     {book.category}
                   </span>
-                  <h2 className="text-xl font-bold mb-1 truncate">{book.title}</h2>
-                  <p className="text-gray-600 text-sm mb-2">By {book.author}</p>
-                  <p className="text-sm font-medium text-gray-500 mb-4">
-                    Copies: <span className="text-green-600 font-bold">{book.totalCopies}</span>
+
+                  <h2 className="mb-1 truncate text-xl font-bold">
+                    {book.title}
+                  </h2>
+
+                  <p className="mb-2 text-sm text-gray-600">
+                    By {book.author}
+                  </p>
+
+                  <p className="mb-4 text-sm font-medium text-gray-500">
+                    Copies:{" "}
+                    <span className="font-bold text-green-600">
+                      {book.totalCopies}
+                    </span>
                   </p>
                 </div>
               </div>
-              <div className="p-5 pt-0 flex gap-2">
+
+              <div className="flex gap-2 p-5 pt-0">
                 <button
                   onClick={() => {
                     setSelectedBook(book);
                     setIsEditModalOpen(true);
                   }}
-                  className="flex-1 py-2 bg-amber-500 text-white rounded-md hover:bg-amber-600 transition text-sm font-medium"
+                  className="flex-1 cursor-pointer rounded-md bg-amber-500 py-2 text-sm font-medium text-white transition hover:bg-amber-600"
                 >
                   Edit
                 </button>
+
                 <button
                   onClick={() => {
                     setBookToDeleteId(book._id);
                     setIsDeleteModalOpen(true);
                   }}
-                  className="flex-1 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition text-sm font-medium"
+                  className="flex-1 cursor-pointer rounded-md bg-red-600 py-2 text-sm font-medium text-white transition hover:bg-red-700"
                 >
                   Delete
                 </button>
@@ -148,21 +376,53 @@ export default function MyBooksPage() {
 
       {/* Edit Modal */}
       {isEditModalOpen && selectedBook && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-lg w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold mb-4">Edit Book: {selectedBook.title}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-xl font-bold">
+              Edit Book: {selectedBook.title}
+            </h3>
+
             <form onSubmit={handleUpdateSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Book Title</label>
-                <input type="text" name="title" defaultValue={selectedBook.title} required className="w-full px-3 py-2 border rounded-md" />
+                <label className="block text-sm font-medium text-gray-700">
+                  Book Title
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  defaultValue={selectedBook.title}
+                  required
+                  minLength={2}
+                  maxLength={150}
+                  className="w-full rounded-md border px-3 py-2"
+                />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700">Author Name</label>
-                <input type="text" name="author" defaultValue={selectedBook.author} required className="w-full px-3 py-2 border rounded-md" />
+                <label className="block text-sm font-medium text-gray-700">
+                  Author Name
+                </label>
+                <input
+                  type="text"
+                  name="author"
+                  defaultValue={selectedBook.author}
+                  required
+                  minLength={2}
+                  maxLength={100}
+                  className="w-full rounded-md border px-3 py-2"
+                />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700">Category</label>
-                <select name="category" defaultValue={selectedBook.category} required className="w-full px-3 py-2 border rounded-md bg-white">
+                <label className="block text-sm font-medium text-gray-700">
+                  Category
+                </label>
+                <select
+                  name="category"
+                  defaultValue={selectedBook.category}
+                  required
+                  className="w-full rounded-md border bg-white px-3 py-2"
+                >
                   <option value="Fiction">Fiction</option>
                   <option value="Science">Science</option>
                   <option value="History">History</option>
@@ -170,31 +430,68 @@ export default function MyBooksPage() {
                   <option value="Others">Others</option>
                 </select>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700">Image URL</label>
-                <input type="url" name="image" defaultValue={selectedBook.image} required className="w-full px-3 py-2 border rounded-md" />
+                <label className="block text-sm font-medium text-gray-700">
+                  Image URL
+                </label>
+                <input
+                  type="url"
+                  name="image"
+                  defaultValue={selectedBook.image}
+                  required
+                  className="w-full rounded-md border px-3 py-2"
+                />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700">Total Copies</label>
-                <input type="number" name="totalCopies" defaultValue={selectedBook.totalCopies} min="1" required className="w-full px-3 py-2 border rounded-md" />
+                <label className="block text-sm font-medium text-gray-700">
+                  Total Copies
+                </label>
+                <input
+                  type="number"
+                  name="totalCopies"
+                  defaultValue={selectedBook.totalCopies}
+                  min="1"
+                  step="1"
+                  required
+                  className="w-full rounded-md border px-3 py-2"
+                />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700">Short Description</label>
-                <textarea name="description" defaultValue={selectedBook.description} rows={3} required className="w-full px-3 py-2 border rounded-md"></textarea>
+                <label className="block text-sm font-medium text-gray-700">
+                  Short Description
+                </label>
+                <textarea
+                  name="description"
+                  defaultValue={selectedBook.description}
+                  rows={3}
+                  required
+                  minLength={10}
+                  maxLength={1000}
+                  className="w-full rounded-md border px-3 py-2"
+                />
               </div>
-              <div className="flex justify-end gap-2 mt-6">
+
+              <div className="mt-6 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setSelectedBook(null);
+                  }}
+                  className="cursor-pointer rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400"
                 >
                   Cancel
                 </button>
+
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  disabled={updating}
+                  className="cursor-pointer rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-60"
                 >
-                  Save Changes
+                  {updating ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -204,22 +501,34 @@ export default function MyBooksPage() {
 
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-xl text-center">
-            <h3 className="text-xl font-bold mb-2 text-gray-800">Are you sure?</h3>
-            <p className="text-gray-600 text-sm mb-6">Do you really want to delete this book? This process cannot be undone.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-xl">
+            <h3 className="mb-2 text-xl font-bold text-gray-800">
+              Are you sure?
+            </h3>
+
+            <p className="mb-6 text-sm text-gray-600">
+              Do you really want to delete this book? This process cannot be undone.
+            </p>
+
             <div className="flex justify-center gap-3">
               <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 font-medium"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setBookToDeleteId(null);
+                }}
+                disabled={deleting}
+                className="cursor-pointer rounded-md bg-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-400"
               >
                 Cancel
               </button>
+
               <button
                 onClick={handleDeleteConfirm}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium"
+                disabled={deleting}
+                className="cursor-pointer rounded-md bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-700 disabled:opacity-60"
               >
-                Yes, Delete
+                {deleting ? "Deleting..." : "Yes, Delete"}
               </button>
             </div>
           </div>

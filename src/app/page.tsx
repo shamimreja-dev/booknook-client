@@ -1,12 +1,10 @@
-'use client';
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import Link from 'next/link';
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { Autoplay, Pagination, Navigation } from 'swiper/modules';
-import 'swiper/css';
-import 'swiper/css/pagination';
-import 'swiper/css/navigation';
+
+"use client";
+
+import { useEffect, useState } from "react";
+import axios from "axios";
+import Link from "next/link";
+import HeroSlider from "./components/HeroSlider";
 
 interface Book {
   _id: string;
@@ -20,144 +18,257 @@ interface Book {
 
 export default function HomePage() {
   const [newArrivals, setNewArrivals] = useState<Book[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    document.title = 'BookNook | Home';
-    axios.get('http://localhost:5000/books')
-      .then(res => {
-        // নতুন বইগুলো প্রথমে দেখানোর জন্য সর্ট এবং লিমিট ৬টি
-        const sortedBooks = res.data.sort((a: Book, b: Book) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    document.title = "BookNook | Home";
+
+    const fetchBooks = async () => {
+      try {
+        const response = await axios.get("http://localhost:5000/books");
+
+        const books: Book[] = Array.isArray(response.data)
+          ? response.data
+          : [];
+
+        const sortedBooks = [...books].sort(
+          (a, b) =>
+            new Date(b.createdAt || 0).getTime() -
+            new Date(a.createdAt || 0).getTime()
+        );
+
         setNewArrivals(sortedBooks.slice(0, 6));
+      } catch (err) {
+        console.error("Failed to fetch books:", err);
+        setError("Unable to load books. Please try again later.");
+      } finally {
         setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to fetch books:', err);
-        setLoading(false);
-      });
+      }
+    };
+
+    fetchBooks();
   }, []);
 
   return (
-    <div className="space-y-16 pb-16">
-      {/* Banner / Slider Section */}
-      <section className="w-full">
-        <Swiper
-          modules={[Autoplay, Pagination, Navigation]}
-          spaceBetween={30}
-          centeredSlides={true}
-          autoplay={{ delay: 3500, disableOnInteraction: false }}
-          pagination={{ clickable: true }}
-          navigation={true}
-          className="w-full h-[450px]"
-        >
-          <SwiperSlide className="bg-blue-900 text-white flex flex-col items-center justify-center text-center px-4">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Welcome to BookNook</h1>
-            <p className="text-lg max-w-xl mb-6 text-gray-200">Discover your next favorite book, explore thousands of titles, and borrow with ease.</p>
-            <Link href="/books" className="px-6 py-3 bg-white text-blue-900 font-semibold rounded-md hover:bg-gray-100 transition">
-              Browse Books
-            </Link>
-          </SwiperSlide>
-          <SwiperSlide className="bg-emerald-900 text-white flex flex-col items-center justify-center text-center px-4">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Expand Your Knowledge</h1>
-            <p className="text-lg max-w-xl mb-6 text-gray-200">From Fiction to Science, find a vast collection of books curated for avid readers.</p>
-            <Link href="/books" className="px-6 py-3 bg-white text-emerald-900 font-semibold rounded-md hover:bg-gray-100 transition">
-              Browse Books
-            </Link>
-          </SwiperSlide>
-          <SwiperSlide className="bg-indigo-900 text-white flex flex-col items-center justify-center text-center px-4">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Borrow & Return Seamlessly</h1>
-            <p className="text-lg max-w-xl mb-6 text-gray-200">Manage your borrowed books, track return dates, and keep reading without interruptions.</p>
-            <Link href="/books" className="px-6 py-3 bg-white text-indigo-900 font-semibold rounded-md hover:bg-gray-100 transition">
-              Browse Books
-            </Link>
-          </SwiperSlide>
-        </Swiper>
+    <main className="space-y-20 pb-16">
+      {/* Hero Slider */}
+      <section className="px-3 pt-6 md:px-6">
+        <HeroSlider />
       </section>
 
-      {/* New Arrivals Section */}
-      <section className="max-w-7xl mx-auto px-4">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-800">New Arrivals</h2>
-          <Link href="/books" className="text-blue-600 hover:underline font-semibold">See All Books</Link>
+      {/* New Arrivals */}
+      <section className="mx-auto max-w-7xl px-4">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="mb-2 font-semibold text-primary">
+              OUR COLLECTION
+            </p>
+            <h2 className="text-3xl font-bold md:text-4xl">
+              New Arrivals
+            </h2>
+            <p className="mt-2 text-base-content/60">
+              Discover the latest additions to our library.
+            </p>
+          </div>
+
+          <Link href="/books" className="btn btn-outline btn-primary">
+            See All Books →
+          </Link>
         </div>
 
         {loading ? (
-          <div className="text-center py-10">Loading new arrivals...</div>
-        ) : newArrivals.length === 0 ? (
-          <p className="text-gray-600 text-center">No books available right now.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {newArrivals.map((book) => (
-              <div key={book._id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col justify-between border border-gray-200 hover:shadow-lg transition">
-                <div>
-                  <img src={book.image} alt={book.title} className="w-full h-60 object-cover" />
-                  <div className="p-5">
-                    <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-md mb-2">
-                      {book.category}
-                    </span>
-                    <h3 className="text-xl font-bold mb-1 truncate">{book.title}</h3>
-                    <p className="text-gray-600 text-sm mb-3">By {book.author}</p>
-                    <p className="text-sm font-medium text-gray-500">
-                      Available Copies: <span className="text-green-600 font-bold">{book.totalCopies}</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="p-5 pt-0">
-                  <Link
-                    href={`/books/${book._id}`}
-                    className="block w-full text-center py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                  >
-                    View Details
-                  </Link>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={index}
+                className="overflow-hidden rounded-xl border border-base-300"
+              >
+                <div className="skeleton h-60 w-full" />
+                <div className="space-y-3 p-5">
+                  <div className="skeleton h-4 w-1/3" />
+                  <div className="skeleton h-6 w-3/4" />
+                  <div className="skeleton h-4 w-1/2" />
+                  <div className="skeleton h-10 w-full" />
                 </div>
               </div>
             ))}
           </div>
+        ) : error ? (
+          <div className="rounded-xl bg-error/10 p-8 text-center text-error">
+            <p>{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="btn btn-sm btn-error mt-4 text-white"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : newArrivals.length === 0 ? (
+          <div className="rounded-xl bg-base-200 py-12 text-center">
+            <p className="text-lg font-semibold">No books available yet.</p>
+            <p className="mt-2 text-base-content/60">
+              Please check back later for new arrivals.
+            </p>
+            <Link href="/books" className="btn btn-primary mt-5">
+              Browse Books
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {newArrivals.map((book) => (
+              <article
+                key={book._id}
+                className="flex flex-col overflow-hidden rounded-xl border border-base-300 bg-base-100 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+              >
+                <img
+                  src={
+                    book.image ||
+                    "https://placehold.co/600x400?text=BookNook"
+                  }
+                  alt={book.title}
+                  className="h-60 w-full object-cover"
+                />
+
+                <div className="flex flex-1 flex-col p-5">
+                  <span className="mb-3 w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                    {book.category}
+                  </span>
+
+                  <h3 className="mb-2 text-xl font-bold">
+                    {book.title}
+                  </h3>
+
+                  <p className="mb-4 text-sm text-base-content/60">
+                    By {book.author}
+                  </p>
+
+                  <p className="mb-5 text-sm">
+                    Available Copies:{" "}
+                    <span
+                      className={
+                        book.totalCopies > 0
+                          ? "font-bold text-success"
+                          : "font-bold text-error"
+                      }
+                    >
+                      {book.totalCopies}
+                    </span>
+                  </p>
+
+                  <Link
+                    href={`/books/${book._id}`}
+                    className="btn btn-primary mt-auto w-full"
+                  >
+                    View Details
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
         )}
-        <div className="text-center mt-10">
-          <Link href="/books" className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition">
-            See All Books
+
+        <div className="mt-10 text-center">
+          <Link href="/books" className="btn btn-primary px-10">
+            Explore All Books
           </Link>
         </div>
       </section>
 
       {/* Extra Section 1: How Borrowing Works */}
-      <section className="bg-gray-50 py-16">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <h2 className="text-2xl md:text-3xl font-bold mb-4 text-gray-800">How Borrowing Works</h2>
-          <p className="text-gray-600 max-w-xl mx-auto mb-12">Get your favorite books in three simple steps.</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="w-12 h-12 bg-blue-100 text-blue-600 font-bold text-xl rounded-full flex items-center justify-center mx-auto mb-4">1</div>
-              <h3 className="text-xl font-semibold mb-2">Browse & Select</h3>
-              <p className="text-gray-600 text-sm">Explore our library collection and choose the book you want to read.</p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="w-12 h-12 bg-blue-100 text-blue-600 font-bold text-xl rounded-full flex items-center justify-center mx-auto mb-4">2</div>
-              <h3 className="text-xl font-semibold mb-2">Borrow Online</h3>
-              <p className="text-gray-600 text-sm">Click borrow, set your return date, and confirm your borrowing instantly.</p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <div className="w-12 h-12 bg-blue-100 text-blue-600 font-bold text-xl rounded-full flex items-center justify-center mx-auto mb-4">3</div>
-              <h3 className="text-xl font-semibold mb-2">Read & Return</h3>
-              <p className="text-gray-600 text-sm">Enjoy reading your book and return it from your dashboard when finished.</p>
-            </div>
+      <section className="bg-base-200 py-16">
+        <div className="mx-auto max-w-7xl px-4">
+          <div className="mb-12 text-center">
+            <p className="mb-2 font-semibold text-primary">
+              SIMPLE PROCESS
+            </p>
+            <h2 className="text-3xl font-bold md:text-4xl">
+              How Borrowing Works
+            </h2>
+            <p className="mx-auto mt-3 max-w-xl text-base-content/60">
+              Get your favorite books in three simple steps.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+            {[
+              {
+                number: "01",
+                icon: "🔎",
+                title: "Browse & Select",
+                description:
+                  "Explore our library collection and choose the book you want to read.",
+              },
+              {
+                number: "02",
+                icon: "📚",
+                title: "Borrow Online",
+                description:
+                  "Choose your borrow and return dates and confirm your borrowing.",
+              },
+              {
+                number: "03",
+                icon: "📖",
+                title: "Read & Return",
+                description:
+                  "Enjoy reading your book and return it when you are finished.",
+              },
+            ].map((step) => (
+              <div
+                key={step.number}
+                className="rounded-xl bg-base-100 p-8 text-center shadow-sm transition hover:shadow-lg"
+              >
+                <div className="mb-4 text-5xl">{step.icon}</div>
+                <span className="font-bold text-primary">
+                  STEP {step.number}
+                </span>
+                <h3 className="mb-3 mt-2 text-xl font-bold">
+                  {step.title}
+                </h3>
+                <p className="text-sm leading-7 text-base-content/60">
+                  {step.description}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Extra Section 2: Top Categories */}
-      <section className="max-w-7xl mx-auto px-4">
-        <h2 className="text-2xl md:text-3xl font-bold text-center mb-4 text-gray-800">Top Categories</h2>
-        <p className="text-gray-600 text-center mb-10">Explore books based on your favorite genres.</p>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {['Fiction', 'Science', 'History', 'Kids', 'Others'].map((cat) => (
-            <Link key={cat} href="/books" className="bg-blue-50 border border-blue-200 p-6 rounded-lg text-center hover:bg-blue-100 transition">
-              <h3 className="text-lg font-bold text-blue-800">{cat}</h3>
+      <section className="mx-auto max-w-7xl px-4">
+        <div className="mb-10 text-center">
+          <p className="mb-2 font-semibold text-primary">
+            FIND YOUR INTEREST
+          </p>
+          <h2 className="text-3xl font-bold md:text-4xl">
+            Explore Top Categories
+          </h2>
+          <p className="mt-3 text-base-content/60">
+            Discover books based on your favorite genres.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+          {[
+            { name: "Fiction", icon: "📖" },
+            { name: "Science", icon: "🔬" },
+            { name: "History", icon: "🏛️" },
+            { name: "Kids", icon: "🧸" },
+            { name: "Others", icon: "📚" },
+          ].map((category) => (
+            <Link
+              key={category.name}
+              href={`/books?category=${category.name}`}
+              className="rounded-xl border border-base-300 bg-base-100 p-6 text-center transition hover:-translate-y-1 hover:border-primary hover:shadow-lg"
+            >
+              <span className="mb-3 block text-4xl">
+                {category.icon}
+              </span>
+              <h3 className="font-bold">{category.name}</h3>
             </Link>
           ))}
         </div>
       </section>
-    </div>
+    </main>
   );
 }

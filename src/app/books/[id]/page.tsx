@@ -1,7 +1,11 @@
-'use client';
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import axios from 'axios';
+
+"use client";
+
+import { useEffect, useState, FormEvent } from "react";
+import { useParams, useRouter } from "next/navigation";
+import axios from "axios";
+import toast, { Toaster } from "react-hot-toast";
+import { authClient } from "@/lib/auth-client";
 
 interface Book {
   _id: string;
@@ -14,131 +18,350 @@ interface Book {
 }
 
 export default function BookDetailsPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
+
+  const { data: session, isPending } = authClient.useSession();
+
   const [book, setBook] = useState<Book | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [borrowDate, setBorrowDate] = useState<string>('');
-  const [returnDate, setReturnDate] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [borrowDate, setBorrowDate] = useState("");
+  const [returnDate, setReturnDate] = useState("");
+  const [borrowing, setBorrowing] = useState(false);
 
-  // বইয়ের ডাটা ফেচ করা
+  // Login protection
   useEffect(() => {
-    if (id) {
-      axios.get(`http://localhost:5000/books/${id}`)
-        .then(res => {
-          setBook(res.data);
-          setLoading(false);
-        })
-        .catch(err => {
-          console.error('Failed to fetch book details:', err);
-          setLoading(false);
-        });
+    if (!isPending && !session?.user) {
+      router.replace("/login");
     }
-  }, [id]);
+  }, [session, isPending, router]);
 
-  // বই বরো করার হ্যান্ডলার
-  const handleBorrowSubmit = async (e: React.FormEvent) => {
+  // Fetch book details
+  useEffect(() => {
+    if (!id || isPending || !session?.user) return;
+
+    const fetchBook = async () => {
+      try {
+        setLoading(true);
+
+        const res = await axios.get(
+          `http://localhost:5000/books/${id}`
+        );
+
+        setBook(res.data);
+      } catch (err) {
+        console.error("Failed to fetch book details:", err);
+        toast.error("Failed to load book details.");
+        setBook(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBook();
+  }, [id, isPending, session]);
+
+  const handleBorrowSubmit = async (
+    e: FormEvent<HTMLFormElement>
+  ) => {
     e.preventDefault();
-    const userEmail = localStorage.getItem('user-email');
 
-    if (!userEmail) {
-      alert('Please login first to borrow a book!');
-      router.push('/login');
+    if (!session?.user) {
+      toast.error("Please login first!");
+      router.push("/login");
+      return;
+    }
+
+    if (!book || borrowing) return;
+
+    if (book.totalCopies <= 0) {
+      toast.error("This book is out of stock.");
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const selectedBorrowDate = new Date(`${borrowDate}T00:00:00`);
+    const selectedReturnDate = new Date(`${returnDate}T00:00:00`);
+
+    if (
+      !borrowDate ||
+      !returnDate ||
+      selectedBorrowDate < today
+    ) {
+      toast.error("Please select a valid borrow date.");
+      return;
+    }
+
+    if (selectedReturnDate <= selectedBorrowDate) {
+      toast.error("Return date must be after borrow date.");
       return;
     }
 
     try {
+      setBorrowing(true);
+
+      const tokenResult = await authClient.token();
+      const token = tokenResult.data?.token;
+
+      if (!token) {
+        throw new Error(
+          "Authentication token not found. Please login again."
+        );
+      }
+
       const borrowData = {
-        bookId: book?._id,
-        bookTitle: book?.title,
-        userEmail,
+        bookId: book._id,
+        bookTitle: book.title,
+        bookImage: book.image,
         borrowDate,
-        returnDate
+        returnDate,
       };
 
-      const res = await axios.post('http://localhost:5000/borrows', borrowData);
+      const res = await axios.post(
+        "http://localhost:5000/borrows",
+        borrowData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          withCredentials: true,
+        }
+      );
+
       if (res.status === 200 || res.status === 201) {
-        alert('Book borrowed successfully!');
+        toast.success("Book borrowed successfully!");
+
         setIsModalOpen(false);
-        router.push('/dashboard/my-borrows'); // অথবা আপনার বরো পেজে রিডাইরেক্ট হবে
+
+        setTimeout(() => {
+          router.push("/dashboard/my-borrows");
+        }, 800);
       }
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to borrow book.');
+    } catch (err: unknown) {
+      console.error("Borrow error:", err);
+
+      let message = "Failed to borrow book.";
+
+      if (axios.isAxiosError(err)) {
+        message =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          message;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+
+      toast.error(message);
+    } finally {
+      setBorrowing(false);
     }
   };
 
-  if (loading) return <div className="text-center py-20">Loading book details...</div>;
-  if (!book) return <div className="text-center py-20 text-red-500">Book not found!</div>;
+  // Loading state
+  if (isPending || loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <span className="loading loading-spinner loading-lg text-primary" />
+        <span className="ml-3 text-gray-600">
+          Loading book details...
+        </span>
+      </div>
+    );
+  }
+
+  // Redirect while unauthenticated
+  if (!session?.user) {
+    return null;
+  }
+
+  // Book not found
+  if (!book) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
+        <h2 className="mb-3 text-2xl font-bold text-gray-800">
+          Book Not Found!
+        </h2>
+
+        <p className="mb-5 text-gray-500">
+          This book may have been removed or does not exist.
+        </p>
+
+        <button
+          onClick={() => router.push("/books")}
+          className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-700"
+        >
+          Browse All Books
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-10">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white p-6 rounded-lg shadow-md">
-        <img src={book.image} alt={book.title} className="w-full h-96 object-cover rounded-md" />
+    <div className="mx-auto max-w-5xl px-4 py-10">
+      <Toaster position="top-center" reverseOrder={false} />
+
+      <button
+        onClick={() => router.back()}
+        className="mb-6 text-sm font-semibold text-indigo-600 hover:underline"
+      >
+        ← Back
+      </button>
+
+      <div className="grid grid-cols-1 gap-8 overflow-hidden rounded-2xl border bg-white p-6 shadow-lg md:grid-cols-2 md:p-8">
+        <div>
+          <img
+            src={
+              book.image ||
+              "https://placehold.co/400x500?text=Book"
+            }
+            alt={book.title}
+            className="h-96 w-full rounded-xl object-cover"
+          />
+        </div>
+
         <div className="flex flex-col justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">{book.title}</h1>
-            <p className="text-gray-600 mb-4">By <span className="font-semibold">{book.author}</span></p>
-            <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-md mb-4">
+            <span className="mb-4 inline-block rounded-full bg-indigo-100 px-4 py-1 text-xs font-semibold text-indigo-700">
               {book.category}
             </span>
-            <p className="text-gray-700 mb-6">{book.description}</p>
-            <p className="text-sm font-medium text-gray-500 mb-6">
-              Available Copies: <span className="text-green-600 font-bold">{book.totalCopies}</span>
+
+            <h1 className="mb-3 text-3xl font-extrabold text-gray-900">
+              {book.title}
+            </h1>
+
+            <p className="mb-5 text-gray-600">
+              By{" "}
+              <span className="font-semibold text-gray-900">
+                {book.author}
+              </span>
             </p>
+
+            <h3 className="mb-2 font-bold text-gray-800">
+              Book Description
+            </h3>
+
+            <p className="mb-6 leading-7 text-gray-600">
+              {book.description || "No description available."}
+            </p>
+
+            <div className="mb-7 rounded-xl bg-gray-50 p-4">
+              <p className="text-sm text-gray-500">
+                Available Copies
+              </p>
+
+              <p
+                className={`mt-1 text-2xl font-bold ${
+                  book.totalCopies > 0
+                    ? "text-green-600"
+                    : "text-red-500"
+                }`}
+              >
+                {book.totalCopies}
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                {book.totalCopies > 0
+                  ? "This book is available for borrowing."
+                  : "Currently out of stock."}
+              </p>
+            </div>
           </div>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setBorrowDate("");
+              setReturnDate("");
+              setIsModalOpen(true);
+            }}
             disabled={book.totalCopies <= 0}
-            className={`w-full py-3 rounded-md text-white font-semibold transition ${
-              book.totalCopies > 0 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'
-            }`}
+            className="w-full rounded-xl bg-indigo-600 py-3.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-400"
           >
-            {book.totalCopies > 0 ? 'Borrow Book' : 'Out of Stock'}
+            {book.totalCopies > 0
+              ? "Borrow This Book"
+              : "Out of Stock"}
           </button>
         </div>
       </div>
 
       {/* Borrow Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-xl">
-            <h3 className="text-xl font-bold mb-4">Borrow: {book.title}</h3>
-            <form onSubmit={handleBorrowSubmit} className="space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => {
+            if (!borrowing) setIsModalOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-2 text-xl font-bold text-gray-900">
+              Borrow Book
+            </h3>
+
+            <p className="mb-5 text-sm text-gray-500">
+              You are borrowing:{" "}
+              <span className="font-semibold text-gray-800">
+                {book.title}
+              </span>
+            </p>
+
+            <form
+              onSubmit={handleBorrowSubmit}
+              className="space-y-4"
+            >
               <div>
-                <label className="block text-sm font-medium text-gray-700">Borrow Date</label>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  Borrow Date
+                </label>
+
                 <input
                   type="date"
                   required
                   value={borrowDate}
-                  onChange={(e) => setBorrowDate(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md"
+                  min={new Date().toLocaleDateString("en-CA")}
+                  onChange={(e) => {
+                    setBorrowDate(e.target.value);
+                    setReturnDate("");
+                  }}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-gray-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700">Return Date</label>
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  Return Date
+                </label>
+
                 <input
                   type="date"
                   required
                   value={returnDate}
+                  min={borrowDate || new Date().toLocaleDateString("en-CA")}
                   onChange={(e) => setReturnDate(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-gray-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 />
               </div>
-              <div className="flex justify-end gap-2 mt-6">
+
+              <div className="flex justify-end gap-3 pt-3">
                 <button
                   type="button"
+                  disabled={borrowing}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                  className="rounded-lg bg-gray-200 px-5 py-2.5 font-semibold text-gray-700 hover:bg-gray-300 disabled:opacity-50"
                 >
                   Cancel
                 </button>
+
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  disabled={borrowing}
+                  className="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Confirm Borrow
+                  {borrowing ? "Processing..." : "Confirm Borrow"}
                 </button>
               </div>
             </form>

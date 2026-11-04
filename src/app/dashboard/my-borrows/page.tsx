@@ -1,86 +1,205 @@
-'use client';
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import { useRouter } from 'next/navigation';
+
+"use client";
+
+import { useEffect, useState } from "react";
+import axios from "axios";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import { authClient } from "@/lib/auth-client";
 
 interface BorrowItem {
   _id: string;
+  bookId: string;
   bookTitle: string;
+  bookImage?: string;
   borrowDate: string;
   returnDate: string;
 }
 
+const API_URL = "http://localhost:5000";
+
 export default function MyBorrowsPage() {
-  const [borrows, setBorrows] = useState<BorrowItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   const router = useRouter();
 
+  const { data: session, isPending } = authClient.useSession();
+
+  const [borrows, setBorrows] = useState<BorrowItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [returningId, setReturningId] = useState<string | null>(null);
+
+  // Get JWT token from Better Auth
+  const getAuthHeaders = async () => {
+    const tokenResult = await authClient.token();
+
+    if (!tokenResult.data?.token) {
+      throw new Error("Authentication token not found. Please login again.");
+    }
+
+    return {
+      Authorization: `Bearer ${tokenResult.data.token}`,
+    };
+  };
+
+  // Fetch current user's borrowed books
   useEffect(() => {
-    const userEmail = localStorage.getItem('user-email');
-    if (!userEmail) {
-      alert('Please login first!');
-      router.push('/login');
+    if (isPending) return;
+
+    if (!session?.user) {
+      setLoading(false);
+      router.replace("/login");
       return;
     }
 
-    // ইউজারের বরো করা বইগুলো ফেচ করা
-    axios.get(`http://localhost:5000/borrows?email=${userEmail}`)
-      .then(res => {
-        setBorrows(res.data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to fetch borrows:', err);
-        setLoading(false);
-      });
-  }, [router]);
+    let cancelled = false;
 
-  // বই রিটার্ন বা ডিলিট করার হ্যান্ডলার
+    const fetchBorrows = async () => {
+      try {
+        setLoading(true);
+
+        const headers = await getAuthHeaders();
+
+        const res = await axios.get(`${API_URL}/borrows`, {
+          headers,
+          withCredentials: true,
+        });
+
+        if (!cancelled) {
+          setBorrows(res.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch borrows:", error);
+
+        if (!cancelled) {
+          toast.error("Failed to load borrowed books.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchBorrows();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session, isPending, router]);
+
+  // Return book
   const handleReturnBook = async (id: string) => {
-    if (!confirm('Are you sure you want to return this book?')) return;
+    const isConfirmed = window.confirm(
+      "Are you sure you want to return this book?"
+    );
+
+    if (!isConfirmed) return;
 
     try {
-      const res = await axios.delete(`http://localhost:5000/borrows/${id}`);
-      if (res.status === 200) {
-        alert('Book returned successfully!');
-        setBorrows(borrows.filter(item => item._id !== id));
-      }
-    } catch (err) {
-      console.error('Failed to return book:', err);
-      alert('Failed to return book.');
+      setReturningId(id);
+
+      const headers = await getAuthHeaders();
+
+      await axios.delete(`${API_URL}/borrows/${id}`, {
+        headers,
+        withCredentials: true,
+      });
+
+      toast.success("Book returned successfully!");
+
+      setBorrows((previous) =>
+        previous.filter((item) => item._id !== id)
+      );
+    } catch (error) {
+      console.error("Failed to return book:", error);
+      toast.error("Failed to return book.");
+    } finally {
+      setReturningId(null);
     }
   };
 
-  if (loading) return <div className="text-center py-20">Loading your borrowed books...</div>;
+  if (isPending || loading) {
+    return (
+      <div className="py-20 text-center">
+        Loading your borrowed books...
+      </div>
+    );
+  }
+
+  if (!session?.user) {
+    return (
+      <div className="py-20 text-center">
+        Please login to see your borrowed books.
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold mb-6">My Borrowed Books</h1>
+    <div className="mx-auto max-w-5xl px-4 py-10">
+      <h1 className="mb-6 text-2xl font-bold">
+        My Borrowed Books
+      </h1>
+
       {borrows.length === 0 ? (
-        <p className="text-gray-600">You haven&apos;t borrowed any books yet.</p>
+        <div className="py-10 text-center">
+          <p className="mb-4 text-gray-600">
+            You haven't borrowed any books yet.
+          </p>
+
+          <button
+            onClick={() => router.push("/books")}
+            className="rounded-md bg-blue-600 px-5 py-2 text-white hover:bg-blue-700"
+          >
+            Browse Books
+          </button>
+        </div>
       ) : (
-        <div className="overflow-x-auto shadow-md rounded-lg">
-          <table className="w-full text-left border-collapse bg-white">
-            <thead className="bg-gray-200 text-gray-700 uppercase text-xs">
+        <div className="overflow-x-auto rounded-lg shadow-md">
+          <table className="w-full border-collapse bg-white text-left">
+            <thead className="bg-gray-200 text-xs uppercase text-gray-700">
               <tr>
-                <th className="py-3 px-4">Book Title</th>
-                <th className="py-3 px-4">Borrow Date</th>
-                <th className="py-3 px-4">Return Date</th>
-                <th className="py-3 px-4 text-center">Action</th>
+                <th className="px-4 py-3">Book</th>
+                <th className="px-4 py-3">Borrow Date</th>
+                <th className="px-4 py-3">Return Date</th>
+                <th className="px-4 py-3 text-center">Action</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-200">
               {borrows.map((item) => (
                 <tr key={item._id} className="hover:bg-gray-50">
-                  <td className="py-3 px-4 font-medium text-gray-800">{item.bookTitle}</td>
-                  <td className="py-3 px-4 text-gray-600">{item.borrowDate}</td>
-                  <td className="py-3 px-4 text-gray-600">{item.returnDate}</td>
-                  <td className="py-3 px-4 text-center">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {item.bookImage && (
+                        <img
+                          src={item.bookImage}
+                          alt={item.bookTitle}
+                          className="h-14 w-11 rounded object-cover"
+                        />
+                      )}
+
+                      <span className="font-medium text-gray-800">
+                        {item.bookTitle}
+                      </span>
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-3 text-gray-600">
+                    {new Date(item.borrowDate).toLocaleDateString()}
+                  </td>
+
+                  <td className="px-4 py-3 text-gray-600">
+                    {new Date(item.returnDate).toLocaleDateString()}
+                  </td>
+
+                  <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => handleReturnBook(item._id)}
-                      className="px-3 py-1 bg-red-600 text-white rounded-md text-sm hover:bg-red-700 transition"
+                      disabled={returningId === item._id}
+                      className="cursor-pointer rounded-md bg-red-600 px-3 py-1 text-sm text-white transition hover:bg-red-700 disabled:opacity-60"
                     >
-                      Return
+                      {returningId === item._id
+                        ? "Returning..."
+                        : "Return"}
                     </button>
                   </td>
                 </tr>
