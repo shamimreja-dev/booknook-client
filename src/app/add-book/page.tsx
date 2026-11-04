@@ -112,16 +112,16 @@ export default function AddBookPage() {
       };
 
       const response = await axios.post(
-        "http://localhost:5000/books",
-        newBook,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          withCredentials: true,
-        }
-      );
+  `${process.env.NEXT_PUBLIC_API_URL}/books`, 
+  newBook, 
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    withCredentials: true,
+  }
+);
 
       if (response.status === 200 || response.status === 201) {
         toast.success("Book added successfully!");

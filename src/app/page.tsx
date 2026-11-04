@@ -26,7 +26,7 @@ export default function HomePage() {
 
     const fetchBooks = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/books");
+        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/books`);
 
         const books: Book[] = Array.isArray(response.data)
           ? response.data

@@ -46,8 +46,8 @@ export default function BookDetailsPage() {
         setLoading(true);
 
         const res = await axios.get(
-          `http://localhost:5000/books/${id}`
-        );
+  `${process.env.NEXT_PUBLIC_API_URL}/books/${id}`
+);
 
         setBook(res.data);
       } catch (err) {
@@ -121,15 +121,15 @@ export default function BookDetailsPage() {
       };
 
       const res = await axios.post(
-        "http://localhost:5000/borrows",
-        borrowData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          withCredentials: true,
-        }
-      );
+  `${process.env.NEXT_PUBLIC_API_URL}/borrows`,
+  borrowData,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    withCredentials: true,
+  }
+);
 
       if (res.status === 200 || res.status === 201) {
         toast.success("Book borrowed successfully!");
