@@ -1,14 +1,18 @@
 import { createAuthClient } from "better-auth/react";
 import { jwtClient } from "better-auth/client/plugins";
 
+const getBaseURL = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  return typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://booknook-server-2t5l.onrender.com";
+};
+
 export const authClient = createAuthClient({
-  // NEXT_PUBLIC_API_URL না পেলে সরাসরি Render-এর লাইভ লিংক বা Localhost নিবে
-  baseURL:
-    process.env.NEXT_PUBLIC_API_URL ||
-    "https://booknook-server-2t5l.onrender.com",
-
+  baseURL: getBaseURL(),
   plugins: [jwtClient()],
-
   fetchOptions: {
     credentials: "include",
   },
