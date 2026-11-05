@@ -2,9 +2,12 @@
 
 BookNook is a small online library management application where users can explore books, add books, borrow available copies, and manage their borrowed books. It provides a simple and responsive interface for book lovers.
 
-## 🌐 Live Website
+## Live Website: https://booknook-client-sepia.vercel.app/
+**Server URL:https://booknook-server-2t5l.onrender.com
+- **Client Repository:https://github.com/shamimreja-dev/booknook-client
+- **Server Repository:https://github.com/shamimreja-dev/booknook-server
 
-**Live Demo:** [Add your deployed website URL here]
+
 
 ## ✨ Features
 
